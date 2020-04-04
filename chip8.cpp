@@ -1,15 +1,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
+#include "chip8screen.hpp"
 
-class chip8emu {
+class Chip8Emu {
 private:
     unsigned char* memory;
     unsigned char* v;
     unsigned short int i;
-
+    Chip8Screen* screen;
 public:
-    chip8emu() {
+    Chip8Emu(Chip8Screen* screen) {
         // allocate memory and registers
         this->memory = new unsigned char [4096];
         this->v = new unsigned char [16];
@@ -18,15 +19,22 @@ public:
         // check for allocation errors
         if (this->memory == NULL || this->v == NULL)
             throw std::runtime_error("Failed to allocate memory!");
+
+        this->screen = screen;
     }
 
-    ~chip8emu() {
+    ~Chip8Emu() {
         // cleanup
         delete[] this->memory;
         delete[] this->v;
     }
 
     bool play() {
+        SDL_Event event;
+        while (true) {
+            if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
+                break;
+        }
 
         return true;
     }
@@ -71,8 +79,10 @@ public:
 
 int main() {
     try {
-        chip8emu emu = chip8emu();
+        Chip8Screen screen = Chip8Screen(4);
+        Chip8Emu emu = Chip8Emu(&screen);
         printf("%s", emu.load_game("spaceinvaders.ch8") ? "Game loaded!\n" : "");
+        emu.play();
         emu.print_memory();
         return 0;
     } catch (const std::exception& e) {
