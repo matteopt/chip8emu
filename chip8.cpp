@@ -18,6 +18,10 @@ public:
         if (this->memory == NULL)
             throw std::runtime_error("Failed to allocate memory!");
 
+        // erase memory (init)
+        for (size_t i = 0; i < 4096; i++)
+            this->memory[i] = 0x00;
+
         this->screen = &screen;
         this->cpu = &cpu;
     }
@@ -32,7 +36,8 @@ public:
         while (true) {
             if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
                 break;
-            this->cpu->cycle(this->memory);
+            this->cpu->cycle(this->memory, this->screen);
+            this->print_screen_memory();
         }
 
         return true;
@@ -73,13 +78,23 @@ public:
                 printf("\n%08x: ", i);
             printf("%02x%02x ", this->memory[i], this->memory[i+1]);
         }
+        printf("\n");
+    }
+
+    void print_screen_memory() {
+        for (size_t i = 0xF00; i < 0xFFF; i += 2) {
+            if (i % 16 == 0)
+                printf("\n%08x: ", i);
+            printf("%02x%02x ", this->memory[i], this->memory[i+1]);
+        }
+        printf("\n");
     }
 };
 
 int main() {
     try {
-        Chip8Screen screen = Chip8Screen(4);
-        Chip8Cpu cpu = Chip8Cpu();
+        Chip8Screen screen = Chip8Screen(8);
+        Chip8Cpu cpu = Chip8Cpu(400);
 
         Chip8Emu emu = Chip8Emu(screen, cpu);
 
