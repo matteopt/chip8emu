@@ -9,6 +9,7 @@ private:
     bool* pixels;
     SDL_Window* window;
     SDL_Renderer* renderer;
+    SDL_Surface* surface;
 public:
     Chip8Screen(unsigned char scale) {
         this->w = 64 * scale;
@@ -24,6 +25,7 @@ public:
             throw std::runtime_error("SDL Error!");
         } else {
             SDL_CreateWindowAndRenderer(this->w, this->h, 0, &this->window, &this->renderer);
+            this->surface = SDL_GetWindowSurface(this->window);
         }
     }
 

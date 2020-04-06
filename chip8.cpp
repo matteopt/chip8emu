@@ -2,31 +2,29 @@
 #include <cstdlib>
 #include <stdexcept>
 #include "chip8screen.hpp"
+#include "chip8cpu.hpp"
 
 class Chip8Emu {
 private:
     unsigned char* memory;
-    unsigned char* v;
-    unsigned short int i;
     Chip8Screen* screen;
+    Chip8Cpu* cpu;
 public:
-    Chip8Emu(Chip8Screen* screen) {
-        // allocate memory and registers
+    Chip8Emu(Chip8Screen& screen, Chip8Cpu& cpu) {
+        // allocate memory
         this->memory = new unsigned char [4096];
-        this->v = new unsigned char [16];
-        this->i = 0x0000;
 
         // check for allocation errors
-        if (this->memory == NULL || this->v == NULL)
+        if (this->memory == NULL)
             throw std::runtime_error("Failed to allocate memory!");
 
-        this->screen = screen;
+        this->screen = &screen;
+        this->cpu = &cpu;
     }
 
     ~Chip8Emu() {
         // cleanup
         delete[] this->memory;
-        delete[] this->v;
     }
 
     bool play() {
@@ -34,6 +32,7 @@ public:
         while (true) {
             if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
                 break;
+            this->cpu->cycle(this->memory);
         }
 
         return true;
@@ -80,10 +79,14 @@ public:
 int main() {
     try {
         Chip8Screen screen = Chip8Screen(4);
-        Chip8Emu emu = Chip8Emu(&screen);
+        Chip8Cpu cpu = Chip8Cpu();
+
+        Chip8Emu emu = Chip8Emu(screen, cpu);
+
         printf("%s", emu.load_game("spaceinvaders.ch8") ? "Game loaded!\n" : "");
         emu.play();
         emu.print_memory();
+
         return 0;
     } catch (const std::exception& e) {
         printf("* Runtime error! %s\n", e.what());
