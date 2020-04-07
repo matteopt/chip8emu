@@ -38,6 +38,7 @@ public:
                 break;
             this->cpu->cycle(this->memory, this->screen);
             this->print_screen_memory();
+            SDL_Delay(100);
         }
 
         return true;

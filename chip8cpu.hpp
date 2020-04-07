@@ -28,21 +28,23 @@ private:
             if (!(x % 8)) {
                 oldmem = memory[memptr];
                 newmem = oldmem ^ memory[this->i + row];
+                memory[memptr] = newmem;
             } else {
                 oldmem = (memory[memptr] << (x % 8)) | (memory[memptr+1] >> (8 - (x % 8)));
                 newmem = oldmem ^ memory[this->i + row];
 
                 // all this stuff can be simplified todo
-                memory[memptr] = (memory[memptr] >> (8 - (x % 8))) << (8 - (x % 8));
-                memory[memptr] |= newmem >> (x % 8);
-                memory[memptr+1] = (memory[memptr+1] << (x % 8)) >> (x % 8);
-                memory[memptr+1] |= newmem << (8 - (x % 8));
+                // memory[memptr] = (memory[memptr] >> (8 - (x % 8))) << (8 - (x % 8));
+                // memory[memptr] |= newmem >> (x % 8);
+                // memory[memptr+1] = (memory[memptr+1] << (x % 8)) >> (x % 8);
+                // memory[memptr+1] |= newmem << (8 - (x % 8));
+                memory[memptr] ^= memory[this->i + row] >> (x % 8);
+                memory[memptr+1] ^= memory[this->i + row] << (8 - (x % 8));
             }
 
             if ((oldmem & newmem) != 0x00)
                 setvf = true;
 
-            memory[memptr] = newmem;
             printf("  -> %04x: %02x (I=%04x)\n", memptr, (memory[this->i + row]), (this->i + row));
         }
 
@@ -147,7 +149,13 @@ public:
 
         }
         else if ((instruction >> 12) == 0xF) {
+            if ((instruction & 0x00FF) == 0x07) {
 
+            }
+            else if ((instruction & 0x00FF) == 0x1E)
+                this->i += this->v[(instruction >> 8) & 0x000F];
+            else if ((instruction & 0x00FF) == 0x29)
+                this->i = 5 * ((instruction >> 8) & 0x000F);
         }
 
         SDL_Delay(this->delay);
