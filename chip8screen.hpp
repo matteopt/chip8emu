@@ -54,7 +54,7 @@ public:
     }
 
     void update(unsigned char*& memory) {
-        for (size_t i = 0xF00; i < 0xFFF; i++) {
+        for (size_t i = 0xF00; i <= 0xFFF; i++) {
             for (size_t k = 0; k < 8; k++)
                 this->draw_pixel((((i - 0xF00)*8 + k) % 64), floor(((i - 0xF00)*8 + k) / 64), ((memory[i] >> (7 - k)) & 0x01));
         }

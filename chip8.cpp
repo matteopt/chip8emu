@@ -2,15 +2,19 @@
 #include <cstdlib>
 #include <stdexcept>
 #include "chip8screen.hpp"
+#include "chip8timer.hpp"
 #include "chip8cpu.hpp"
 
 class Chip8Emu {
 private:
     unsigned char* memory;
+
     Chip8Screen* screen;
     Chip8Cpu* cpu;
+    Chip8Timer* delay_timer;
+    Chip8Timer* sound_timer;
 public:
-    Chip8Emu(Chip8Screen& screen, Chip8Cpu& cpu) {
+    Chip8Emu(Chip8Screen& screen, Chip8Cpu& cpu, Chip8Timer& delay_timer, Chip8Timer& sound_timer) {
         // allocate memory
         this->memory = new unsigned char [4096];
 
@@ -20,10 +24,15 @@ public:
 
         // erase memory (init)
         for (size_t i = 0; i < 4096; i++)
-            this->memory[i] = 0x00;
+            this->memory[i] = 0;
+
+        for (size_t i = 0; i < 0x200; i++)
+            this->memory[i] = 0xFF;
 
         this->screen = &screen;
         this->cpu = &cpu;
+        this->delay_timer = &delay_timer;
+        this->sound_timer = &sound_timer;
     }
 
     ~Chip8Emu() {
@@ -32,13 +41,24 @@ public:
     }
 
     bool play() {
+        unsigned long ticks = SDL_GetTicks();
+        unsigned short int tick_delta = 0;
         SDL_Event event;
         while (true) {
             if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
                 break;
-            this->cpu->cycle(this->memory, this->screen);
-            this->print_screen_memory();
-            SDL_Delay(100);
+            this->cpu->cycle(this->memory, this->screen, this->delay_timer, this->sound_timer);
+            tick_delta = SDL_GetTicks() - ticks;
+            printf("tickd %d", tick_delta);
+            if (tick_delta >= 17) {
+                tick_delta = 0;
+                ticks = SDL_GetTicks();
+
+                this->delay_timer->tick();
+                this->sound_timer->tick();
+            }
+            // this->print_screen_memory();
+            // SDL_Delay(500);
         }
 
         return true;
@@ -95,13 +115,15 @@ public:
 int main() {
     try {
         Chip8Screen screen = Chip8Screen(8);
-        Chip8Cpu cpu = Chip8Cpu(400);
+        Chip8Cpu cpu = Chip8Cpu(1000);
+        Chip8Timer delay_timer = Chip8Timer();
+        Chip8Timer sound_timer = Chip8Timer();
 
-        Chip8Emu emu = Chip8Emu(screen, cpu);
+        Chip8Emu emu = Chip8Emu(screen, cpu, delay_timer, sound_timer);
 
         printf("%s", emu.load_game("spaceinvaders.ch8") ? "Game loaded!\n" : "");
-        emu.play();
         emu.print_memory();
+        emu.play();
 
         return 0;
     } catch (const std::exception& e) {

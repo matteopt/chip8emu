@@ -7,23 +7,24 @@ private:
     unsigned char* v;
     unsigned short int i;
     unsigned short int pc;
+    unsigned char sp;
 
+    unsigned int frequency;
     double delay;
 
     void clear_screen(unsigned char*& memory) {
-        for (size_t i = 0xF00; i < 0xFFF; i++)
-            memory[i] = 0x00;
+        for (size_t i = 0xF00; i <= 0xFFF; i++)
+            memory[i] = 0;
     }
 
     bool draw_sprite(unsigned char*& memory, unsigned char x, unsigned char y, unsigned char h) {
         bool setvf = false;
 
-        printf("  drawing: I=%08x @(%d, %d)\n", this->i, x, y);
+        printf("  drawing: I = %04x @(%d, %d)\n", this->i, x, y);
         for (size_t row = 0; row < h; row++) {
             unsigned short int memptr = 0xF00 + ((y + row) * 8) + floor(x / 8);
             unsigned char newmem;
             unsigned char oldmem;
-
 
             if (!(x % 8)) {
                 oldmem = memory[memptr];
@@ -50,14 +51,27 @@ private:
 
         return setvf;
     }
+
+    void print_stack(unsigned char*& memory) {
+        for (size_t i = 0; i < this->sp; i++)
+            printf("  %04x: %02x\n  %04x: %02x\n",
+                (0xEA0 - 2 + (this->sp * 2)),
+                memory[0xEA0 - 2 + (this->sp * 2)],
+                (0xEA0 - 2 + (this->sp * 2) + 1),
+                memory[0xEA0 - 2 + (this->sp * 2) + 1]
+            );
+    }
 public:
-    Chip8Cpu(size_t frequency) {
+    Chip8Cpu(unsigned int frequency) {
         // allocate registers
         this->v = new unsigned char [16];
-        this->i = 0x0;
+        this->i = 0;
         this->pc = 0x200;
+        this->sp = 0;
 
-        this->delay = 60 / frequency;
+        // set cpu frequency
+        this->frequency = frequency;
+        this->delay = (1.0 / frequency) * 1000;
 
         // check for allocation errors
         if (this->v == NULL)
@@ -65,17 +79,42 @@ public:
 
         // erase registers (init)
         for (size_t i = 0; i < 16; i++)
-            this->v[i] = 0x00;
+            this->v[i] = 0;
     }
 
-    void cycle(unsigned char*& memory, Chip8Screen*& screen) {
+    void cycle(unsigned char*& memory, Chip8Screen*& screen, Chip8Timer*& delay_timer, Chip8Timer*& sound_timer) {
         unsigned short int instruction = (memory[this->pc] << 8) | (memory[this->pc + 1]);
-        printf("--------------------------------\ninstr: %04x\n", instruction);
+        unsigned long int ticks = SDL_GetTicks();
+
+        printf("frequency %d, delay %9.6f\n", this->frequency, this->delay);
+        printf("@%04x: %04x - ", this->pc, instruction);
+        printf("dt: %d, st: %d\n", delay_timer->get_value(), sound_timer->get_value());
+        printf("I = %04x, V [ ", this->i);
+
+        for (size_t i = 0; i <= 0xF; i++) {
+            printf("%01X: %02x", i, this->v[i]);
+            if (i != 0xF)
+                printf(", ");
+        }
+        printf(" ]\n");
 
         if (instruction == 0xE0)
             this->clear_screen(memory);
+        else if (instruction == 0xEE) {
+            this->print_stack(memory);
+            this->pc = memory[0xEA0 - 2 + (this->sp * 2)] << 8;
+            this->pc ^= memory[0xEA0 - 2 + (this->sp-- * 2) + 1];
+            printf("  returning to: %04x, sp=%d\n", this->pc, this->sp);
+        }
         else if ((instruction >> 12) == 0x1)
             this->pc = (instruction & 0x0FFF) - 2;
+        else if ((instruction >> 12) == 0x2) {
+            memory[0xEA0 - 2 + (++this->sp * 2)] = this->pc >> 8;
+            memory[0xEA0 - 2 + (this->sp * 2) + 1] = this->pc;
+            this->print_stack(memory);
+            this->pc = (instruction & 0x0FFF) - 2;
+            printf("  calling fn @: %04x, sp=%d\n", this->pc+2, this->sp);
+        }
         else if ((instruction >> 12) == 0x3) {
             if (this->v[(instruction >> 8) & 0x000F] == (instruction & 0x00FF))
                 this->pc += 2;
@@ -146,19 +185,63 @@ public:
             screen->update(memory);
         }
         else if ((instruction >> 12) == 0xE) {
-
+            if ((instruction & 0x00FF) == 0x9E) {}
+            else if ((instruction & 0x00FF) == 0xA1)
+                this->pc += 2;
         }
         else if ((instruction >> 12) == 0xF) {
-            if ((instruction & 0x00FF) == 0x07) {
-
+            if ((instruction & 0x00FF) == 0x07)
+                this->v[(instruction >> 8) & 0x000F] = delay_timer->get_value();
+            else if ((instruction & 0x00FF) == 0x0A) {
+                this->pc -= 2;
             }
-            else if ((instruction & 0x00FF) == 0x1E)
+            else if ((instruction & 0x00FF) == 0x15)
+                delay_timer->set(this->v[(instruction >> 8) & 0x000F]);
+            else if ((instruction & 0x00FF) == 0x18)
+                sound_timer->set(this->v[(instruction >> 8) & 0x000F]);
+            else if ((instruction & 0x00FF) == 0x1E) {
+                if (this->i + this->v[(instruction >> 8) & 0x000F] > 0xFFFF)
+                    this->v[0xF] = 1;
+                else
+                    this->v[0xF] = 0;
                 this->i += this->v[(instruction >> 8) & 0x000F];
+            }
             else if ((instruction & 0x00FF) == 0x29)
                 this->i = 5 * ((instruction >> 8) & 0x000F);
+            else if ((instruction & 0x00FF) == 0x33) {
+                unsigned char vv = this->v[(instruction >> 8) & 0x000F];
+
+                memory[this->i] = 0;
+                memory[this->i+1] = 0;
+                memory[this->i+2] = 0;
+
+                while (vv > 99) {
+                    memory[this->i]++;
+                    vv -= 100;
+                }
+                while (vv > 9) {
+                    memory[this->i+1]++;
+                    vv -= 10;
+                }
+                while (vv > 0) {
+                    memory[this->i+2]++;
+                    vv -= 1;
+                }
+            }
+            else if ((instruction & 0x00FF) == 0x55) {
+                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
+                    memory[this->i + o] = this->v[o];
+            }
+            else if ((instruction & 0x00FF) == 0x65) {
+                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
+                    this->v[o] = memory[this->i + o];
+            }
         }
 
         SDL_Delay(this->delay);
+        // delay_timer->tick();
+        // sound_timer->tick();
+
         this->pc += 2;
     }
 };
