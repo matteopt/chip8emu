@@ -242,11 +242,11 @@ public:
                 }
             }
             else if ((instruction & 0x00FF) == 0x55) {
-                for (size_t o = 0; o <= this->v[(instruction >> 8) & 0x000F]; o++)
+                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
                     memory[this->i + o] = this->v[o];
             }
             else if ((instruction & 0x00FF) == 0x65) {
-                for (size_t o = 0; o <= this->v[(instruction >> 8) & 0x000F]; o++)
+                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
                     this->v[o] = memory[this->i + o];
             }
         }
