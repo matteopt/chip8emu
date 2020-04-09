@@ -43,8 +43,12 @@ private:
                 memory[memptr+1] ^= memory[this->i + row] << (8 - (x % 8));
             }
 
-            if ((oldmem & newmem) != 0x00)
-                setvf = true;
+            for (size_t i = 0; i < 8; i++) {
+                if (((oldmem >> i) & 0x01) && !((newmem >> i) & 0x01)) {
+                    setvf = true;
+                    break;
+                }
+            }
 
             printf("  -> %04x: %02x (I=%04x)\n", memptr, (memory[this->i + row]), (this->i + row));
         }
@@ -82,7 +86,7 @@ public:
             this->v[i] = 0;
     }
 
-    void cycle(unsigned char*& memory, Chip8Screen*& screen, Chip8Timer*& delay_timer, Chip8Timer*& sound_timer) {
+    void cycle(unsigned char*& memory, Chip8Screen*& screen, Chip8Timer*& delay_timer, Chip8Timer*& sound_timer, Chip8Keyboard*& keyboard) {
         unsigned short int instruction = (memory[this->pc] << 8) | (memory[this->pc + 1]);
         unsigned long int ticks = SDL_GetTicks();
 
@@ -110,7 +114,7 @@ public:
             this->pc = (instruction & 0x0FFF) - 2;
         else if ((instruction >> 12) == 0x2) {
             memory[0xEA0 - 2 + (++this->sp * 2)] = this->pc >> 8;
-            memory[0xEA0 - 2 + (this->sp * 2) + 1] = this->pc;
+            memory[0xEA0 - 2 + (this->sp * 2) + 1] = this->pc & 0x00FF;
             this->print_stack(memory);
             this->pc = (instruction & 0x0FFF) - 2;
             printf("  calling fn @: %04x, sp=%d\n", this->pc+2, this->sp);
@@ -135,20 +139,21 @@ public:
             if ((instruction & 0x000F) == 0x0)
                 this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 4) & 0x000F];
             else if ((instruction & 0x000F) == 0x1)
-                this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 8) & 0x000F] | this->v[(instruction >> 4) & 0x000F];
+                this->v[(instruction >> 8) & 0x000F] |= this->v[(instruction >> 4) & 0x000F];
             else if ((instruction & 0x000F) == 0x2)
-                this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 8) & 0x000F] & this->v[(instruction >> 4) & 0x000F];
+                this->v[(instruction >> 8) & 0x000F] &= this->v[(instruction >> 4) & 0x000F];
             else if ((instruction & 0x000F) == 0x3)
-                this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 8) & 0x000F] ^ this->v[(instruction >> 4) & 0x000F];
+                this->v[(instruction >> 8) & 0x000F] ^= this->v[(instruction >> 4) & 0x000F];
             else if ((instruction & 0x000F) == 0x4) {
-                if (this->v[(instruction >> 8) & 0x000F] + this->v[(instruction >> 4) & 0x000F] > 0xFF)
+                unsigned short int result = this->v[(instruction >> 8) & 0x000F] + this->v[(instruction >> 4) & 0x000F];
+                if (result > 0xFF)
                     this->v[0xF] = 0x1;
                 else
                     this->v[0xF] = 0x0;
-                this->v[(instruction >> 8) & 0x000F] += this->v[(instruction >> 4) & 0x000F];
+                this->v[(instruction >> 8) & 0x000F] = (unsigned char) (result & 0xFF);
             }
             else if ((instruction & 0x000F) == 0x5) {
-                if (this->v[(instruction >> 4) & 0x000F] <= this->v[(instruction >> 8) & 0x000F])
+                if (this->v[(instruction >> 4) & 0x000F] < this->v[(instruction >> 8) & 0x000F])
                     this->v[0xF] = 1;
                 else
                     this->v[0xF] = 0;
@@ -159,14 +164,14 @@ public:
                 this->v[(instruction >> 8) & 0x000F] >>= 1;
             }
             else if ((instruction & 0x000F) == 0x7) {
-                if (this->v[(instruction >> 4) & 0x000F] >= this->v[(instruction >> 8) & 0x000F])
+                if (this->v[(instruction >> 4) & 0x000F] > this->v[(instruction >> 8) & 0x000F])
                     this->v[0xF] = 1;
                 else
                     this->v[0xF] = 0;
                 this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 4) & 0x000F] - this->v[(instruction >> 8) & 0x000F];
             }
             else if ((instruction & 0x000F) == 0xE) {
-                this->v[0xF] = (instruction & 0x8000);
+                this->v[0xF] = (this->v[(instruction >> 8) & 0x000F] & 0x80) >> 7;
                 this->v[(instruction >> 8) & 0x000F] <<= 1;
             }
         }
@@ -185,29 +190,37 @@ public:
             screen->update(memory);
         }
         else if ((instruction >> 12) == 0xE) {
-            if ((instruction & 0x00FF) == 0x9E) {}
-            else if ((instruction & 0x00FF) == 0xA1)
-                this->pc += 2;
+            if ((instruction & 0x00FF) == 0x9E) {
+                if (keyboard->get_key(this->v[(instruction >> 8) & 0x000F]))
+                    this->pc += 2;
+            }
+            else if ((instruction & 0x00FF) == 0xA1) {
+                if (!keyboard->get_key(this->v[(instruction >> 8) & 0x000F]))
+                    this->pc += 2;
+            }
         }
         else if ((instruction >> 12) == 0xF) {
             if ((instruction & 0x00FF) == 0x07)
                 this->v[(instruction >> 8) & 0x000F] = delay_timer->get_value();
             else if ((instruction & 0x00FF) == 0x0A) {
-                this->pc -= 2;
+                keyboard->await();
+                if (!keyboard->ack_key())
+                    this->pc -= 2;
             }
             else if ((instruction & 0x00FF) == 0x15)
                 delay_timer->set(this->v[(instruction >> 8) & 0x000F]);
             else if ((instruction & 0x00FF) == 0x18)
                 sound_timer->set(this->v[(instruction >> 8) & 0x000F]);
             else if ((instruction & 0x00FF) == 0x1E) {
-                if (this->i + this->v[(instruction >> 8) & 0x000F] > 0xFFFF)
+                unsigned int result = this->i + this->v[(instruction >> 8) & 0x000F];
+                if (result > 0xFFFF)
                     this->v[0xF] = 1;
                 else
                     this->v[0xF] = 0;
-                this->i += this->v[(instruction >> 8) & 0x000F];
+                this->i = (unsigned short int) (result & 0xFFFF);
             }
             else if ((instruction & 0x00FF) == 0x29)
-                this->i = 5 * ((instruction >> 8) & 0x000F);
+                this->i = 5 * (this->v[(instruction >> 8) & 0x000F]);
             else if ((instruction & 0x00FF) == 0x33) {
                 unsigned char vv = this->v[(instruction >> 8) & 0x000F];
 
@@ -229,18 +242,16 @@ public:
                 }
             }
             else if ((instruction & 0x00FF) == 0x55) {
-                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
+                for (size_t o = 0; o <= this->v[(instruction >> 8) & 0x000F]; o++)
                     memory[this->i + o] = this->v[o];
             }
             else if ((instruction & 0x00FF) == 0x65) {
-                for (size_t o = 0; o <= ((instruction >> 8) & 0x000F); o++)
+                for (size_t o = 0; o <= this->v[(instruction >> 8) & 0x000F]; o++)
                     this->v[o] = memory[this->i + o];
             }
         }
 
         SDL_Delay(this->delay);
-        // delay_timer->tick();
-        // sound_timer->tick();
 
         this->pc += 2;
     }

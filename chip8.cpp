@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include "chip8screen.hpp"
 #include "chip8timer.hpp"
+#include "chip8keyboard.hpp"
 #include "chip8cpu.hpp"
 
 class Chip8Emu {
@@ -13,8 +14,9 @@ private:
     Chip8Cpu* cpu;
     Chip8Timer* delay_timer;
     Chip8Timer* sound_timer;
+    Chip8Keyboard* keyboard;
 public:
-    Chip8Emu(Chip8Screen& screen, Chip8Cpu& cpu, Chip8Timer& delay_timer, Chip8Timer& sound_timer) {
+    Chip8Emu(Chip8Screen& screen, Chip8Cpu& cpu, Chip8Timer& delay_timer, Chip8Timer& sound_timer, Chip8Keyboard& keyboard) {
         // allocate memory
         this->memory = new unsigned char [4096];
 
@@ -26,13 +28,28 @@ public:
         for (size_t i = 0; i < 4096; i++)
             this->memory[i] = 0;
 
-        for (size_t i = 0; i < 0x200; i++)
-            this->memory[i] = 0xFF;
+        char fonts [] = { 0xF0, 0x90, 0x90, 0x90, 0xF0,
+                          0x20, 0x60, 0x20, 0x20, 0x70,
+                          0xF0, 0x10, 0xF0, 0x80, 0xF0,
+                          0xF0, 0x10, 0xF0, 0x10, 0xF0,
+                          0xF0, 0x80, 0xF0, 0x90, 0xF0,
+                          0xF0, 0x10, 0x20, 0x40, 0x40,
+                          0xF0, 0x90, 0xF0, 0x90, 0xF0,
+                          0xF0, 0x90, 0xF0, 0x10, 0xF0,
+                          0xF0, 0x90, 0xF0, 0x90, 0x90,
+                          0xE0, 0x90, 0xE0, 0x90, 0xE0,
+                          0xF0, 0x80, 0x80, 0x80, 0xF0,
+                          0xE0, 0x90, 0x90, 0x90, 0xE0,
+                          0xF0, 0x80, 0xF0, 0x80, 0xF0,
+                          0xF0, 0x80, 0xF0, 0x80, 0x80};
+        for (size_t i = 0; i < 80; i++)
+            this->memory[i] = fonts[i];
 
         this->screen = &screen;
         this->cpu = &cpu;
         this->delay_timer = &delay_timer;
         this->sound_timer = &sound_timer;
+        this->keyboard = &keyboard;
     }
 
     ~Chip8Emu() {
@@ -47,9 +64,12 @@ public:
         while (true) {
             if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
                 break;
-            this->cpu->cycle(this->memory, this->screen, this->delay_timer, this->sound_timer);
+            else if(event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+                this->keyboard->notify(event);
+
             tick_delta = SDL_GetTicks() - ticks;
-            printf("tickd %d", tick_delta);
+            if (tick_delta % 17 == 0)
+                this->cpu->cycle(this->memory, this->screen, this->delay_timer, this->sound_timer, this->keyboard);
             if (tick_delta >= 17) {
                 tick_delta = 0;
                 ticks = SDL_GetTicks();
@@ -115,15 +135,15 @@ public:
 int main() {
     try {
         Chip8Screen screen = Chip8Screen(8);
-        Chip8Cpu cpu = Chip8Cpu(1000);
+        Chip8Cpu cpu = Chip8Cpu(540);
         Chip8Timer delay_timer = Chip8Timer();
         Chip8Timer sound_timer = Chip8Timer();
+        Chip8Keyboard keyboard = Chip8Keyboard();
 
-        Chip8Emu emu = Chip8Emu(screen, cpu, delay_timer, sound_timer);
+        Chip8Emu emu = Chip8Emu(screen, cpu, delay_timer, sound_timer, keyboard);
 
-        printf("%s", emu.load_game("spaceinvaders.ch8") ? "Game loaded!\n" : "");
-        emu.print_memory();
-        emu.play();
+        if (emu.load_game("spaceinvaders.ch8"))
+            emu.play();
 
         return 0;
     } catch (const std::exception& e) {

@@ -21,10 +21,12 @@ private:
         else
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 
-        for (size_t i = 0; i < this->scale; i++) {
-            for (size_t k = 0; k < this->scale; k++)
-                SDL_RenderDrawPoint(this->renderer, (x*this->scale)+i, (y*this->scale)+k);
-        }
+        SDL_Rect rect;
+        rect.x = x * this->scale;
+        rect.y = y * this->scale;
+        rect.w = this->scale;
+        rect.h = this->scale;
+        SDL_RenderFillRect(renderer, &rect);
     }
 public:
     Chip8Screen(unsigned char scale) {
