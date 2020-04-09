@@ -102,16 +102,20 @@ public:
         }
         printf(" ]\n");
 
-        if (instruction == 0xE0)
+        if (instruction == 0xE0) {
             this->clear_screen(memory);
+            printf("  screen cleared\n");
+        }
         else if (instruction == 0xEE) {
             this->print_stack(memory);
             this->pc = memory[0xEA0 - 2 + (this->sp * 2)] << 8;
             this->pc ^= memory[0xEA0 - 2 + (this->sp-- * 2) + 1];
             printf("  returning to: %04x, sp=%d\n", this->pc, this->sp);
         }
-        else if ((instruction >> 12) == 0x1)
+        else if ((instruction >> 12) == 0x1) {
             this->pc = (instruction & 0x0FFF) - 2;
+            printf("  jumping to: %04x\n", this->pc+2);
+        }
         else if ((instruction >> 12) == 0x2) {
             memory[0xEA0 - 2 + (++this->sp * 2)] = this->pc >> 8;
             memory[0xEA0 - 2 + (this->sp * 2) + 1] = this->pc & 0x00FF;
@@ -120,21 +124,31 @@ public:
             printf("  calling fn @: %04x, sp=%d\n", this->pc+2, this->sp);
         }
         else if ((instruction >> 12) == 0x3) {
-            if (this->v[(instruction >> 8) & 0x000F] == (instruction & 0x00FF))
+            if (this->v[(instruction >> 8) & 0x000F] == (instruction & 0x00FF)) {
                 this->pc += 2;
+                printf("  V%01X == %02x, skipping %04x, next %04x\n", ((instruction >> 8) & 0x000F), (instruction & 0x00FF), this->pc, this->pc+2);
+            }
         }
         else if ((instruction >> 12) == 0x4) {
-            if (this->v[(instruction >> 8) & 0x000F] != (instruction & 0x00FF))
+            if (this->v[(instruction >> 8) & 0x000F] != (instruction & 0x00FF)) {
                 this->pc += 2;
+                printf("  V%01X != %02x, skipping %04x, next %04x\n", ((instruction >> 8) & 0x000F), (instruction & 0x00FF), this->pc, this->pc+2);
+            }
         }
         else if ((instruction >> 12) == 0x5) {
-            if (this->v[(instruction >> 8) & 0x000F] == this->v[(instruction >> 4) & 0x000F])
+            if (this->v[(instruction >> 8) & 0x000F] == this->v[(instruction >> 4) & 0x000F]) {
                 this->pc += 2;
+                printf("  V%01X == V%01X, skipping %04x, next %04x\n", ((instruction >> 8) & 0x000F), ((instruction >> 4) & 0x000F), this->pc, this->pc+2);
+            }
         }
-        else if ((instruction >> 12) == 0x6)
+        else if ((instruction >> 12) == 0x6) {
             this->v[(instruction >> 8) & 0x000F] = (instruction & 0x00FF);
-        else if ((instruction >> 12) == 0x7)
+            printf("  V%01X = %02x\n", ((instruction >> 8) & 0x000F), (instruction & 0x00FF));
+        }
+        else if ((instruction >> 12) == 0x7) {
             this->v[(instruction >> 8) & 0x000F] += (instruction & 0x00FF);
+            printf("  V%01X += %02x\n", ((instruction >> 8) & 0x000F), (instruction & 0x00FF));
+        }
         else if ((instruction >> 12) == 0x8) {
             if ((instruction & 0x000F) == 0x0)
                 this->v[(instruction >> 8) & 0x000F] = this->v[(instruction >> 4) & 0x000F];
@@ -160,7 +174,7 @@ public:
                 this->v[(instruction >> 8) & 0x000F] -= this->v[(instruction >> 4) & 0x000F];
             }
             else if ((instruction & 0x000F) == 0x6) {
-                this->v[0xF] = (instruction & 0x0001);
+                this->v[0xF] = (this->v[(instruction >> 8) & 0x000F] & 0x01);
                 this->v[(instruction >> 8) & 0x000F] >>= 1;
             }
             else if ((instruction & 0x000F) == 0x7) {
@@ -176,8 +190,10 @@ public:
             }
         }
         else if ((instruction >> 12) == 0x9) {
-            if (this->v[(instruction >> 8) & 0x000F] != this->v[(instruction >> 4) & 0x000F])
+            if (this->v[(instruction >> 8) & 0x000F] != this->v[(instruction >> 4) & 0x000F]) {
                 this->pc += 2;
+                printf("  V%01X != V%01X, skipping %04x, next %04x\n", ((instruction >> 8) & 0x000F), ((instruction >> 4) & 0x000F), this->pc, this->pc+2);
+            }
         }
         else if ((instruction >> 12) == 0xA)
             this->i = (instruction & 0x0FFF);
@@ -206,6 +222,10 @@ public:
                 keyboard->await();
                 if (!keyboard->ack_key())
                     this->pc -= 2;
+                else {
+                    this->v[(instruction >> 8) & 0x000F] = keyboard->last_key();
+                    printf("  last key pressed: %01X\n", this->v[(instruction >> 8) & 0x000F]);
+                }
             }
             else if ((instruction & 0x00FF) == 0x15)
                 delay_timer->set(this->v[(instruction >> 8) & 0x000F]);

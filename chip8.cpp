@@ -32,16 +32,17 @@ public:
                           0x20, 0x60, 0x20, 0x20, 0x70,
                           0xF0, 0x10, 0xF0, 0x80, 0xF0,
                           0xF0, 0x10, 0xF0, 0x10, 0xF0,
+                          0x90, 0x90, 0xF0, 0x10, 0x10,
+                          0xF0, 0x80, 0xF0, 0x10, 0xF0,
                           0xF0, 0x80, 0xF0, 0x90, 0xF0,
                           0xF0, 0x10, 0x20, 0x40, 0x40,
                           0xF0, 0x90, 0xF0, 0x90, 0xF0,
                           0xF0, 0x90, 0xF0, 0x10, 0xF0,
                           0xF0, 0x90, 0xF0, 0x90, 0x90,
-                          0xE0, 0x90, 0xE0, 0x90, 0xE0,
-                          0xF0, 0x80, 0x80, 0x80, 0xF0,
                           0xE0, 0x90, 0x90, 0x90, 0xE0,
                           0xF0, 0x80, 0xF0, 0x80, 0xF0,
                           0xF0, 0x80, 0xF0, 0x80, 0x80};
+
         for (size_t i = 0; i < 80; i++)
             this->memory[i] = fonts[i];
 
@@ -57,19 +58,25 @@ public:
         delete[] this->memory;
     }
 
-    bool play() {
+    bool play(bool debug) {
         unsigned long ticks = SDL_GetTicks();
         unsigned short int tick_delta = 0;
         SDL_Event event;
         while (true) {
+            tick_delta = SDL_GetTicks() - ticks;
+
             if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
                 break;
-            else if(event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+            else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
                 this->keyboard->notify(event);
 
-            tick_delta = SDL_GetTicks() - ticks;
-            if (tick_delta % 17 == 0)
+            if (debug) {
+                if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_n)
+                    this->cpu->cycle(this->memory, this->screen, this->delay_timer, this->sound_timer, this->keyboard);
+            } else {
                 this->cpu->cycle(this->memory, this->screen, this->delay_timer, this->sound_timer, this->keyboard);
+            }
+
             if (tick_delta >= 17) {
                 tick_delta = 0;
                 ticks = SDL_GetTicks();
@@ -135,7 +142,7 @@ public:
 int main() {
     try {
         Chip8Screen screen = Chip8Screen(8);
-        Chip8Cpu cpu = Chip8Cpu(540);
+        Chip8Cpu cpu = Chip8Cpu(400);
         Chip8Timer delay_timer = Chip8Timer();
         Chip8Timer sound_timer = Chip8Timer();
         Chip8Keyboard keyboard = Chip8Keyboard();
@@ -143,7 +150,7 @@ int main() {
         Chip8Emu emu = Chip8Emu(screen, cpu, delay_timer, sound_timer, keyboard);
 
         if (emu.load_game("spaceinvaders.ch8"))
-            emu.play();
+            emu.play(false);
 
         return 0;
     } catch (const std::exception& e) {

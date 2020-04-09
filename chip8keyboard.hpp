@@ -3,11 +3,13 @@ private:
     bool* keystates;
     bool keypress;
     bool awaiting;
+    unsigned char lastkey;
 public:
     Chip8Keyboard() {
         this->keystates = new bool [16];
         this->keypress = false;
         this->awaiting = false;
+        this->lastkey = 0;
 
         if (this->keystates == NULL)
             throw std::runtime_error("Failed to allocate memory!");
@@ -70,6 +72,13 @@ public:
             this->keystates[0xF] = (e.type == SDL_KEYDOWN);
             break;
         }
+
+        for (size_t i = 0; i <= 0xF; i++) {
+            if (this->keystates[i] == 1 && this->lastkey != i) {
+                this->lastkey = i;
+                break;
+            }
+        }
     }
 
     bool get_key(unsigned char n) {
@@ -77,6 +86,10 @@ public:
             return false;
 
         return this->keystates[n];
+    }
+
+    char last_key() {
+        return this->lastkey;
     }
 
     void await() {
